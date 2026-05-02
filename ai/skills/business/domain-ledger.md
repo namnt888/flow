@@ -1,31 +1,25 @@
-🛠️ Năng lực: Core Ledger Domain (Giao dịch cốt lõi)
+🛠️ Năng lực: Core Ledger Domain (Sổ cái)
 
-Tài liệu này quy định cấu trúc cốt lõi của sổ cái (Ledger) và các giao dịch cơ bản. BẮT BUỘC đọc khi thay đổi cấu trúc bảng transactions hoặc accounts.
+Tài liệu này quy định cấu trúc cốt lõi của sổ cái và các giao dịch. ĐỌC KỸ TRƯỚC KHI TẠO BẢNG TRANSACTIONS.
 
-1. Định dạng Tiền tệ (Absolute Amount Rule)
+1. Định dạng Tiền tệ (CRITICAL)
 
-Để tránh sai số dấu phẩy động (Floating point precision) trong tài chính:
+Tuyệt đối không dùng Float hay Decimal để lưu tiền.
 
-Dưới Database (packages/db), mọi cột liên quan đến tiền (amount, balance) BẮT BUỘC phải là kiểu bigint.
+Bắt buộc dùng bigint (Drizzle: bigint('amount', { mode: 'bigint' })).
 
-Giá trị lưu trữ là giá trị thực tế nhân với 100 (Ví dụ: 10,000 VNĐ -> lưu là 1000000).
+Giá trị lưu trữ = Số tiền thực tế × 100.
 
-Dữ liệu amount lưu xuống DB LUÔN LÀ SỐ DƯƠNG.
+Cột amount LUÔN LÀ SỐ DƯƠNG.
 
-2. Chiều dòng tiền (Transaction Type)
+2. Các Bảng Cốt Lõi (Core Tables)
 
-Việc xác định dòng tiền tăng hay giảm phụ thuộc vào Enum Type, KHÔNG phụ thuộc vào dấu của Amount.
+accounts: Bảng tài khoản (Ví/Thẻ/Ngân hàng). Các cột tối thiểu: id (uuid, default random), name (text), type (enum: cash, bank, credit), currency (text, default 'VND'), created_at.
 
-INCOME: Tiền đi vào Account (+).
+categories: Bảng phân loại. Cột tối thiểu: id, name, type (enum: income, expense, transfer), created_at.
 
-EXPENSE: Tiền đi ra khỏi Account (-).
+transactions: Sổ cái giao dịch. Cột tối thiểu: id, account_id (fk), category_id (fk), amount (bigint), type (enum: income, expense, transfer), date (timestamp), notes (text), created_at.
 
-TRANSFER: Tiền đi ra từ account_id và đi vào một destination_account_id.
+3. Chuyển đổi Dữ liệu (Domain Logic)
 
-3. Database Schema Guidelines (Supabase/Drizzle)
-
-Luôn sử dụng uuid (mặc định là gen_random_uuid()) cho Primary Keys.
-
-Luôn có 2 cột tracking mặc định: created_at (default now) và updated_at.
-
-Phải có index trên các trường thường xuyên query (ví dụ: account_id, transaction_date).
+Trong packages/domain: Cần có hàm convert giữa Input UI (ví dụ chuỗi "1,234.56") sang DB (BigInt 123456n) và ngược lại.
