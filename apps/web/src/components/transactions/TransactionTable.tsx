@@ -24,12 +24,8 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  mockTransactions,
-  formatAmount,
-  type MockTransaction,
-  type TransactionType,
-} from '@/lib/mock-transactions';
+import type { TransactionRow, TransactionType } from '@/lib/transactions';
+import { formatAmount } from '@flow/domain';
 
 const badgeLabel: Record<TransactionType, string> = {
   INCOME: 'Income',
@@ -37,13 +33,13 @@ const badgeLabel: Record<TransactionType, string> = {
   TRANSFER: 'Transfer',
 };
 
-const badgeVariant = {
-  INCOME: 'default' as const,
-  EXPENSE: 'destructive' as const,
-  TRANSFER: 'secondary' as const,
+const badgeVariant: Record<TransactionType, 'default' | 'destructive' | 'secondary'> = {
+  INCOME: 'default',
+  EXPENSE: 'destructive',
+  TRANSFER: 'secondary',
 };
 
-const columnHelper = createColumnHelper<MockTransaction>();
+const columnHelper = createColumnHelper<TransactionRow>();
 
 const columns = [
   columnHelper.display({
@@ -67,7 +63,7 @@ const columns = [
     enableSorting: false,
     enableHiding: false,
   }),
-  columnHelper.accessor('date', {
+  columnHelper.accessor('transactionDate', {
     header: ({ column }) => (
       <SortHeader
         label="Date"
@@ -77,7 +73,7 @@ const columns = [
     ),
     cell: ({ getValue }) => {
       const date = getValue();
-      return <span className="text-muted-foreground">{format(date, 'dd/MM/yyyy')}</span>;
+      return <span className="text-muted-foreground">{format(new Date(date), 'dd/MM/yyyy')}</span>;
     },
   }),
   columnHelper.accessor('categoryName', {
@@ -88,9 +84,26 @@ const columns = [
         onToggle={() => column.toggleSorting()}
       />
     ),
-    cell: ({ getValue }) => (
-      <span className="font-medium">{getValue()}</span>
-    ),
+    cell: ({ getValue }) => {
+      const category = getValue();
+      return <span className="font-medium">{category || '—'}</span>;
+    },
+  }),
+  columnHelper.display({
+    id: 'account',
+    header: 'Account',
+    cell: ({ row }) => {
+      const { type, sourceAccountName, destinationAccountName } = row.original;
+      if (type === 'TRANSFER' && sourceAccountName && destinationAccountName) {
+        return (
+          <Badge variant="outline" className="font-normal">
+            {sourceAccountName} <span className="text-muted-foreground mx-1">&rarr;</span> {destinationAccountName}
+          </Badge>
+        );
+      }
+      return <span className="text-muted-foreground">{sourceAccountName || '—'}</span>;
+    },
+    enableSorting: false,
   }),
   columnHelper.accessor('notes', {
     header: 'Notes',
@@ -179,12 +192,12 @@ function SortHeader({
   );
 }
 
-export function TransactionTable() {
+export function TransactionTable({ data }: { data: TransactionRow[] }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const table = useReactTable({
-    data: mockTransactions,
+    data,
     columns,
     state: {
       sorting,
