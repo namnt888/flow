@@ -33,11 +33,23 @@
    - Xóa `apps/web/src/lib/mock-transactions.ts` (mock data cũ).
    - Export `db` từ `@flow/db` (thêm vào `packages/db/src/index.ts`).
 
+7. **JOIN accounts 2 lần + Cột Account trong Table:**
+   - `getTransactions()` dùng `alias()` từ `drizzle-orm/pg-core` để LEFT JOIN bảng `accounts` làm 2 alias: `source_account` và `destination_account`.
+   - `TransactionRow` type mới: `sourceAccountName`, `destinationAccountName` thay vì `accountName` (uuid cũ).
+   - `TransactionTable` thêm cột Account: hiển thị "A → B" (Badge variant="outline") cho TRANSFER, hiển thị tên account cho INCOME/EXPENSE.
+
+8. **Dynamic Transfer Form + superRefine + Grid Layout:**
+   - Zod schema dùng `.superRefine()`: bắt buộc `destinationAccountId` khi type = TRANSFER, kiểm tra source ≠ destination.
+   - Form hiện dropdown "Destination Account" động khi chọn type = TRANSFER, ẩn category field.
+   - Layout grid-cols-2 cho Date + Amount nằm ngang.
+   - Loại trừ account nguồn khỏi dropdown đích (filter động).
+   - `createTransaction()` nhận `destinationAccountId` và insert vào DB.
+
 ## DB Tables ảnh hưởng
 
-- `transactions` — Select + Insert qua Server Actions.
-- `accounts` — Select (cho form dropdown).
-- `categories` — Select (cho form dropdown).
+- `transactions` — Select + Insert qua Server Actions (thêm `destination_account_id`).
+- `accounts` — Select (cho form dropdown + JOIN alias).
+- `categories` — Select (cho form dropdown, filter theo type).
 
 ## Cách test
 

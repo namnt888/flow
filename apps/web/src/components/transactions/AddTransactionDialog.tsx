@@ -34,14 +34,34 @@ import {
   type CreateTransactionInput,
 } from '@/actions/transaction.actions';
 
-const formSchema = z.object({
-  amount: z.coerce.number().positive('Amount must be positive'),
-  type: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']),
-  transactionDate: z.string().min(1, 'Date is required'),
-  notes: z.string().optional(),
-  accountId: z.string().min(1, 'Account is required'),
-  categoryId: z.string().optional(),
-});
+const formSchema = z
+  .object({
+    amount: z.coerce.number().positive('Amount must be positive'),
+    type: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']),
+    transactionDate: z.string().min(1, 'Date is required'),
+    notes: z.string().optional(),
+    accountId: z.string().min(1, 'Account is required'),
+    categoryId: z.string().optional(),
+    destinationAccountId: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.type === 'TRANSFER') {
+      if (!data.destinationAccountId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Destination account is required for transfers',
+          path: ['destinationAccountId'],
+        });
+      }
+      if (data.destinationAccountId === data.accountId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Destination account must be different from source account',
+          path: ['destinationAccountId'],
+        });
+      }
+    }
+  });
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -73,6 +93,7 @@ export function AddTransactionDialog() {
       notes: '',
       accountId: '',
       categoryId: '',
+      destinationAccountId: '',
     },
   });
 
@@ -105,7 +126,8 @@ export function AddTransactionDialog() {
         transactionDate: values.transactionDate,
         notes: values.notes || undefined,
         accountId: values.accountId,
-        categoryId: values.categoryId || undefined,
+        categoryId: values.type === 'TRANSFER' ? undefined : (values.categoryId || undefined),
+        destinationAccountId: values.type === 'TRANSFER' ? (values.destinationAccountId || undefined) : undefined,
       };
 
       await createTransaction(input);
@@ -120,6 +142,9 @@ export function AddTransactionDialog() {
     }
   }
 
+  const defaultAccountIdValue = form.watch('accountId');
+  const availableDestAccounts = accounts.filter((a) => a.id !== defaultAccountIdValue);
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button><Plus className="mr-1.5 size-4" />Add Transaction</Button>} />
@@ -132,6 +157,7 @@ export function AddTransactionDialog() {
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {/* Type selector */}
           <div className="space-y-2">
             <Label htmlFor="type">Type</Label>
             <Select
@@ -152,39 +178,51 @@ export function AddTransactionDialog() {
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="amount">Amount</Label>
-            <Input
-              id="amount"
-              type="number"
-              step="any"
-              placeholder="100000"
-              {...form.register('amount')}
-            />
-            {form.formState.errors.amount && (
-              <p className="text-xs text-destructive">{form.formState.errors.amount.message}</p>
-            )}
+          {/* Date + Amount — grid row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="transactionDate">Date</Label>
+              <Input
+                id="transactionDate"
+                type="date"
+                {...form.register('transactionDate')}
+              />
+              {form.formState.errors.transactionDate && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.transactionDate.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="amount">Amount</Label>
+              <Input
+                id="amount"
+                type="number"
+                step="any"
+                placeholder="100000"
+                {...form.register('amount')}
+              />
+              {form.formState.errors.amount && (
+                <p className="text-xs text-destructive">{form.formState.errors.amount.message}</p>
+              )}
+            </div>
           </div>
 
+          {/* Source Account */}
           <div className="space-y-2">
-            <Label htmlFor="transactionDate">Date</Label>
-            <Input
-              id="transactionDate"
-              type="date"
-              {...form.register('transactionDate')}
-            />
-            {form.formState.errors.transactionDate && (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.transactionDate.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="accountId">Account</Label>
+            <Label htmlFor="accountId">{selectedType === 'TRANSFER' ? 'Source Account' : 'Account'}</Label>
             <Select
               value={form.watch('accountId')}
-              onValueChange={(val) => { if (val !== null) form.setValue('accountId', val) }}
+              onValueChange={(val) => {
+                if (val !== null) {
+                  form.setValue('accountId', val);
+                  // Reset destination if it matches the new source
+                  if (form.getValues('destinationAccountId') === val) {
+                    form.setValue('destinationAccountId', '');
+                  }
+                }
+              }}
             >
               <SelectTrigger id="accountId">
                 <SelectValue placeholder="Select account" />
@@ -204,26 +242,57 @@ export function AddTransactionDialog() {
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="categoryId">Category</Label>
-            <Select
-              value={form.watch('categoryId') || ''}
-              onValueChange={(val) => form.setValue('categoryId', val === null || val === 'none' ? '' : val)}
-            >
-              <SelectTrigger id="categoryId">
-                <SelectValue placeholder="No category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No category</SelectItem>
-                {filteredCategories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Destination Account — only for TRANSFER */}
+          {selectedType === 'TRANSFER' && (
+            <div className="space-y-2">
+              <Label htmlFor="destinationAccountId">Destination Account</Label>
+              <Select
+                value={form.watch('destinationAccountId')}
+                onValueChange={(val) => { if (val !== null) form.setValue('destinationAccountId', val) }}
+              >
+                <SelectTrigger id="destinationAccountId">
+                  <SelectValue placeholder="Select destination" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableDestAccounts.map((acct) => (
+                    <SelectItem key={acct.id} value={acct.id}>
+                      {acct.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.destinationAccountId && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.destinationAccountId.message}
+                </p>
+              )}
+            </div>
+          )}
 
+          {/* Category — hidden for TRANSFER */}
+          {selectedType !== 'TRANSFER' && (
+            <div className="space-y-2">
+              <Label htmlFor="categoryId">Category</Label>
+              <Select
+                value={form.watch('categoryId') || ''}
+                onValueChange={(val) => form.setValue('categoryId', val === null || val === 'none' ? '' : val)}
+              >
+                <SelectTrigger id="categoryId">
+                  <SelectValue placeholder="No category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No category</SelectItem>
+                  {filteredCategories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea

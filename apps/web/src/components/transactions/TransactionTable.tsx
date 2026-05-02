@@ -89,6 +89,22 @@ const columns = [
       return <span className="font-medium">{category || '—'}</span>;
     },
   }),
+  columnHelper.display({
+    id: 'account',
+    header: 'Account',
+    cell: ({ row }) => {
+      const { type, sourceAccountName, destinationAccountName } = row.original;
+      if (type === 'TRANSFER' && sourceAccountName && destinationAccountName) {
+        return (
+          <Badge variant="outline" className="font-normal">
+            {sourceAccountName} <span className="text-muted-foreground mx-1">&rarr;</span> {destinationAccountName}
+          </Badge>
+        );
+      }
+      return <span className="text-muted-foreground">{sourceAccountName || '—'}</span>;
+    },
+    enableSorting: false,
+  }),
   columnHelper.accessor('notes', {
     header: 'Notes',
     cell: ({ getValue }) => {

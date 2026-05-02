@@ -1,6 +1,7 @@
 'use server';
 
 import { eq, desc } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { db, transactions, categories, accounts } from '@flow/db';
 
@@ -11,9 +12,13 @@ const createTransactionSchema = z.object({
   notes: z.string().optional(),
   accountId: z.string().uuid('Invalid account'),
   categoryId: z.string().uuid('Invalid category').optional(),
+  destinationAccountId: z.string().uuid('Invalid destination account').optional(),
 });
 
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
+
+const sourceAccount = alias(accounts, 'source_account');
+const destinationAccount = alias(accounts, 'destination_account');
 
 export async function getTransactions() {
   const rows = await db
@@ -24,11 +29,13 @@ export async function getTransactions() {
       transactionDate: transactions.transactionDate,
       notes: transactions.notes,
       categoryName: categories.name,
-      accountName: accounts.name,
+      sourceAccountName: sourceAccount.name,
+      destinationAccountName: destinationAccount.name,
     })
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+    .leftJoin(sourceAccount, eq(transactions.accountId, sourceAccount.id))
+    .leftJoin(destinationAccount, eq(transactions.destinationAccountId, destinationAccount.id))
     .orderBy(desc(transactions.transactionDate));
 
   return rows.map((row) => ({
@@ -38,7 +45,8 @@ export async function getTransactions() {
     transactionDate: row.transactionDate,
     notes: row.notes,
     categoryName: row.categoryName,
-    accountName: row.accountName,
+    sourceAccountName: row.sourceAccountName,
+    destinationAccountName: row.destinationAccountName,
   }));
 }
 
@@ -49,6 +57,7 @@ export async function createTransaction(data: CreateTransactionInput) {
 
   await db.insert(transactions).values({
     accountId: parsed.accountId,
+    destinationAccountId: parsed.destinationAccountId ?? null,
     categoryId: parsed.categoryId ?? null,
     type: parsed.type,
     amount: BigInt(Math.round(absoluteAmount * 100)),

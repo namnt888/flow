@@ -6,6 +6,7 @@ export interface TransactionRow {
   type: TransactionType;
   transactionDate: string;
   categoryName: string | null;
-  accountName: string | null;
+  sourceAccountName: string | null;
+  destinationAccountName: string | null;
   notes: string | null;
 }
