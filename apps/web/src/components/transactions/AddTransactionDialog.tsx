@@ -1,12 +1,12 @@
 'use client';
 /* eslint-disable react-hooks/incompatible-library -- react-hook-form's watch() is non-memoizable by design */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, Store } from 'lucide-react';
 
 import {
   Dialog,
@@ -20,6 +20,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Combobox } from '@/components/ui/combobox';
 import {
   Select,
   SelectContent,
@@ -31,8 +33,10 @@ import {
   createTransaction,
   getAccounts,
   getCategories,
+  getShops,
   type CreateTransactionInput,
 } from '@/actions/transaction.actions';
+import { parseAmountExpression } from '@flow/domain';
 
 const formSchema = z
   .object({
@@ -43,6 +47,7 @@ const formSchema = z
     accountId: z.string().min(1, 'Account is required'),
     categoryId: z.string().optional(),
     destinationAccountId: z.string().optional(),
+    shopId: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.type === 'TRANSFER') {
@@ -76,10 +81,17 @@ interface Category {
   kind: 'INCOME' | 'EXPENSE';
 }
 
+interface Shop {
+  id: string;
+  name: string;
+  iconUrl: string | null;
+}
+
 export function AddTransactionDialog() {
   const [open, setOpen] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [shops, setShops] = useState<Shop[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -94,22 +106,39 @@ export function AddTransactionDialog() {
       accountId: '',
       categoryId: '',
       destinationAccountId: '',
+      shopId: '',
     },
   });
 
   const selectedType = form.watch('type');
+
+  const handleAmountBlur = useCallback(
+    (e: React.FocusEvent<HTMLInputElement>) => {
+      const raw = e.target.value;
+      if (!raw) return;
+      try {
+        const parsed = parseAmountExpression(raw);
+        form.setValue('amount', parsed, { shouldValidate: true });
+      } catch {
+        // silent — form validation will catch it
+      }
+    },
+    [form],
+  );
 
   const getAccountName = (id: string | undefined) => (id ? accounts.find((a) => a.id === id)?.name ?? id : '');
   const getCategoryName = (id: string | undefined) => (id ? categories.find((c) => c.id === id)?.name ?? id : '');
 
   useEffect(() => {
     async function load() {
-      const [accts, cats] = await Promise.all([
+      const [accts, cats, shopList] = await Promise.all([
         getAccounts(),
         getCategories(),
+        getShops(),
       ]);
       setAccounts(accts);
       setCategories(cats);
+      setShops(shopList);
     }
     load();
   }, []);
@@ -147,6 +176,9 @@ export function AddTransactionDialog() {
 
   const defaultAccountIdValue = form.watch('accountId');
   const availableDestAccounts = accounts.filter((a) => a.id !== defaultAccountIdValue);
+
+  const amountValue = form.watch('amount');
+  const parsedForBadges = !Number.isNaN(Number(amountValue)) && Number(amountValue) > 0 ? Number(amountValue) : null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -201,13 +233,31 @@ export function AddTransactionDialog() {
               <Label htmlFor="amount">Amount</Label>
               <Input
                 id="amount"
-                type="number"
-                step="any"
+                type="text"
+                inputMode="text"
                 placeholder="100000"
                 {...form.register('amount')}
+                onBlur={handleAmountBlur}
               />
               {form.formState.errors.amount && (
                 <p className="text-xs text-destructive">{form.formState.errors.amount.message}</p>
+              )}
+              {parsedForBadges !== null && (
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {[1, 10, 100].map((multiplier) => {
+                    const val = parsedForBadges * multiplier;
+                    return (
+                      <Badge
+                        key={multiplier}
+                        variant="outline"
+                        className="cursor-pointer hover:bg-accent transition-colors text-xs"
+                        onClick={() => form.setValue('amount', val, { shouldValidate: true })}
+                      >
+                        {val.toLocaleString('vi-VN')}
+                      </Badge>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -215,29 +265,17 @@ export function AddTransactionDialog() {
           {/* Source Account */}
           <div className="space-y-2">
             <Label htmlFor="accountId">{selectedType === 'TRANSFER' ? 'Source Account' : 'Account'}</Label>
-            <Select
+            <Combobox
+              items={accounts.map((a) => ({ value: a.id, label: a.name }))}
               value={form.watch('accountId')}
               onValueChange={(val) => {
-                if (val !== null) {
-                  form.setValue('accountId', val);
-                  // Reset destination if it matches the new source
-                  if (form.getValues('destinationAccountId') === val) {
-                    form.setValue('destinationAccountId', '');
-                  }
+                form.setValue('accountId', val, { shouldValidate: true });
+                if (form.getValues('destinationAccountId') === val) {
+                  form.setValue('destinationAccountId', '', { shouldValidate: true });
                 }
               }}
-            >
-              <SelectTrigger id="accountId" className="w-full">
-                <SelectValue placeholder="Select account">{getAccountName(form.watch('accountId'))}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {accounts.map((acct) => (
-                  <SelectItem key={acct.id} value={acct.id}>
-                    {acct.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Select account"
+            />
             {form.formState.errors.accountId && (
               <p className="text-xs text-destructive">
                 {form.formState.errors.accountId.message}
@@ -249,21 +287,12 @@ export function AddTransactionDialog() {
           {selectedType === 'TRANSFER' && (
             <div className="space-y-2">
               <Label htmlFor="destinationAccountId">Destination Account</Label>
-              <Select
-                value={form.watch('destinationAccountId')}
-                onValueChange={(val) => { if (val !== null) form.setValue('destinationAccountId', val) }}
-              >
-                <SelectTrigger id="destinationAccountId" className="w-full">
-                  <SelectValue placeholder="Select destination">{getAccountName(form.watch('destinationAccountId'))}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {availableDestAccounts.map((acct) => (
-                    <SelectItem key={acct.id} value={acct.id}>
-                      {acct.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                items={availableDestAccounts.map((a) => ({ value: a.id, label: a.name }))}
+                value={form.watch('destinationAccountId') ?? ''}
+                onValueChange={(val) => form.setValue('destinationAccountId', val, { shouldValidate: true })}
+                placeholder="Select destination"
+              />
               {form.formState.errors.destinationAccountId && (
                 <p className="text-xs text-destructive">
                   {form.formState.errors.destinationAccountId.message}
@@ -276,24 +305,35 @@ export function AddTransactionDialog() {
           {selectedType !== 'TRANSFER' && (
             <div className="space-y-2">
               <Label htmlFor="categoryId">Category</Label>
-              <Select
+              <Combobox
+                items={[
+                  { value: '', label: 'No category' },
+                  ...filteredCategories.map((cat) => ({ value: cat.id, label: cat.name })),
+                ]}
                 value={form.watch('categoryId') || ''}
-                onValueChange={(val) => form.setValue('categoryId', val === null || val === 'none' ? '' : val)}
-              >
-                <SelectTrigger id="categoryId" className="w-full">
-                  <SelectValue placeholder="No category">{form.watch('categoryId') ? getCategoryName(form.watch('categoryId')) : 'No category'}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No category</SelectItem>
-                  {filteredCategories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onValueChange={(val) => form.setValue('categoryId', val, { shouldValidate: true })}
+                placeholder="Select category"
+              />
             </div>
           )}
+
+          {/* Shop */}
+          <div className="space-y-2">
+            <Label htmlFor="shopId">Shop</Label>
+            <Combobox
+              items={[
+                { value: '', label: 'No shop', iconUrl: null },
+                ...shops.map((shop) => ({
+                  value: shop.id,
+                  label: shop.name,
+                  iconUrl: shop.iconUrl,
+                })),
+              ]}
+              value={form.watch('shopId') || ''}
+              onValueChange={(val) => form.setValue('shopId', val, { shouldValidate: true })}
+              placeholder="Select shop"
+            />
+          </div>
 
           {/* Notes */}
           <div className="space-y-2">

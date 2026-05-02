@@ -3,7 +3,7 @@
 import { eq, desc } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
-import { db, transactions, categories, accounts } from '@flow/db';
+import { db, transactions, categories, accounts, shops } from '@flow/db';
 
 const createTransactionSchema = z.object({
   amount: z.number().positive('Amount must be positive'),
@@ -13,6 +13,7 @@ const createTransactionSchema = z.object({
   accountId: z.string().uuid('Invalid account'),
   categoryId: z.string().uuid('Invalid category').optional(),
   destinationAccountId: z.string().uuid('Invalid destination account').optional(),
+  shopId: z.string().uuid('Invalid shop').optional(),
 });
 
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
@@ -63,6 +64,7 @@ export async function createTransaction(data: CreateTransactionInput) {
     amount: BigInt(Math.round(absoluteAmount * 100)),
     transactionDate: parsed.transactionDate,
     notes: parsed.notes ?? null,
+    shopId: parsed.shopId ?? null,
   });
 }
 
@@ -78,4 +80,10 @@ export async function getCategories() {
     .select({ id: categories.id, name: categories.name, kind: categories.kind })
     .from(categories)
     .where(eq(categories.isActive, true));
+}
+
+export async function getShops() {
+  return db
+    .select({ id: shops.id, name: shops.name, iconUrl: shops.iconUrl })
+    .from(shops);
 }

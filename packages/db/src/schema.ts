@@ -7,6 +7,7 @@ import {
   boolean,
   timestamp,
   date,
+  jsonb,
   index,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -16,6 +17,7 @@ import { relations, sql } from 'drizzle-orm';
 export const accountTypeEnum = pgEnum('account_type', ['BANK', 'CASH', 'CREDIT_CARD']);
 export const transactionTypeEnum = pgEnum('transaction_type', ['INCOME', 'EXPENSE', 'TRANSFER']);
 export const categoryKindEnum = pgEnum('category_kind', ['INCOME', 'EXPENSE']);
+export const syncStatusEnum = pgEnum('sync_status', ['PENDING', 'SYNCED', 'IGNORED']);
 
 /* ========== ACCOUNTS ========== */
 
@@ -98,6 +100,23 @@ export const peopleRelations = relations(people, ({ many }) => ({
   transactions: many(transactions),
 }));
 
+/* ========== SHOPS ========== */
+
+export const shops = pgTable('shops', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  iconUrl: text('icon_url'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export const shopsRelations = relations(shops, ({ many }) => ({
+  transactions: many(transactions),
+}));
+
 /* ========== TRANSACTIONS (Core Ledger) ========== */
 
 export const transactions = pgTable(
@@ -114,6 +133,9 @@ export const transactions = pgTable(
     amount: bigint('amount', { mode: 'bigint' }).notNull(),
     transactionDate: date('transaction_date').notNull(),
     notes: text('notes'),
+    shopId: uuid('shop_id').references(() => shops.id),
+    syncStatus: syncStatusEnum('sync_status').notNull().default('PENDING'),
+    metadata: jsonb('metadata'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -153,5 +175,9 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   person: one(people, {
     fields: [transactions.personId],
     references: [people.id],
+  }),
+  shop: one(shops, {
+    fields: [transactions.shopId],
+    references: [shops.id],
   }),
 }));
