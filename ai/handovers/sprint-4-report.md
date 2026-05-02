@@ -45,6 +45,18 @@
    - Loại trừ account nguồn khỏi dropdown đích (filter động).
    - `createTransaction()` nhận `destinationAccountId` và insert vào DB.
 
+9. **Fix UI Dropdown co cụm:**
+   - Thêm `className="w-full"` vào tất cả `<SelectTrigger>` trong form để đồng bộ chiều rộng.
+   - Destination Account, Source Account, Category, Type đều rộng bằng nhau.
+
+10. **Business Logic TRANSFER:**
+   - Category tự động ẩn khi type = TRANSFER (chỉ hiện cho INCOME/EXPENSE).
+   - Destination Account tự động ẩn khi type ≠ TRANSFER.
+   - Zod superRefine chặn source = destination, bắt buộc destinationAccountId cho TRANSFER.
+
+11. **Cập nhật Seed Data:**
+   - Thêm 2 categories mới: "Đầu tư / Mua Vàng" (EXPENSE), "Thu nhập thụ động" (INCOME).
+
 ## DB Tables ảnh hưởng
 
 - `transactions` — Select + Insert qua Server Actions (thêm `destination_account_id`).

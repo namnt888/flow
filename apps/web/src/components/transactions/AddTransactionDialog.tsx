@@ -99,6 +99,9 @@ export function AddTransactionDialog() {
 
   const selectedType = form.watch('type');
 
+  const getAccountName = (id: string | undefined) => (id ? accounts.find((a) => a.id === id)?.name ?? id : '');
+  const getCategoryName = (id: string | undefined) => (id ? categories.find((c) => c.id === id)?.name ?? id : '');
+
   useEffect(() => {
     async function load() {
       const [accts, cats] = await Promise.all([
@@ -164,7 +167,7 @@ export function AddTransactionDialog() {
               value={form.watch('type')}
               onValueChange={(val) => { if (val !== null) form.setValue('type', val as FormValues['type']) }}
             >
-              <SelectTrigger id="type">
+              <SelectTrigger id="type" className="w-full">
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
@@ -224,8 +227,8 @@ export function AddTransactionDialog() {
                 }
               }}
             >
-              <SelectTrigger id="accountId">
-                <SelectValue placeholder="Select account" />
+              <SelectTrigger id="accountId" className="w-full">
+                <SelectValue placeholder="Select account">{getAccountName(form.watch('accountId'))}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {accounts.map((acct) => (
@@ -250,8 +253,8 @@ export function AddTransactionDialog() {
                 value={form.watch('destinationAccountId')}
                 onValueChange={(val) => { if (val !== null) form.setValue('destinationAccountId', val) }}
               >
-                <SelectTrigger id="destinationAccountId">
-                  <SelectValue placeholder="Select destination" />
+                <SelectTrigger id="destinationAccountId" className="w-full">
+                  <SelectValue placeholder="Select destination">{getAccountName(form.watch('destinationAccountId'))}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {availableDestAccounts.map((acct) => (
@@ -277,8 +280,8 @@ export function AddTransactionDialog() {
                 value={form.watch('categoryId') || ''}
                 onValueChange={(val) => form.setValue('categoryId', val === null || val === 'none' ? '' : val)}
               >
-                <SelectTrigger id="categoryId">
-                  <SelectValue placeholder="No category" />
+                <SelectTrigger id="categoryId" className="w-full">
+                  <SelectValue placeholder="No category">{form.watch('categoryId') ? getCategoryName(form.watch('categoryId')) : 'No category'}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No category</SelectItem>
